@@ -1,18 +1,43 @@
 import { Router } from "express";
-import { isAuthenticated } from "../middleware/auth";
+import { isAuthenticated, ownsLocation, ownsReview } from "../middleware/auth";
 import pool from "../config/db";
 import { syncReviewsForLocation, postReply } from "../services/google";
 import { generateReply, getGuidelinesForLocation } from "../services/claude";
 
 const router = Router();
 
+// Simple in-memory rate limiter for AI generation
+const aiRateLimit = new Map<string, number[]>();
+const AI_RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
+const AI_RATE_LIMIT_MAX = 10; // max 10 generations per minute per user
+
+function checkAiRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const timestamps = (aiRateLimit.get(userId) || []).filter(
+    (t) => now - t < AI_RATE_LIMIT_WINDOW_MS
+  );
+  if (timestamps.length >= AI_RATE_LIMIT_MAX) {
+    aiRateLimit.set(userId, timestamps);
+    return false;
+  }
+  timestamps.push(now);
+  aiRateLimit.set(userId, timestamps);
+  return true;
+}
+
 // Get reviews for a location
-router.get("/location/:locationId", isAuthenticated, async (req, res) => {
+router.get("/location/:locationId", isAuthenticated, ownsLocation, async (req, res) => {
   try {
     const { locationId } = req.params;
-    const { filter = "all", page = "1" } = req.query;
+    const page = (req.query.page as string) || "1";
+    const filter = (req.query.filter as string) || "all";
     const limit = 20;
     const offset = (parseInt(page as string) - 1) * limit;
+
+    const validFilters = ["all", "unreplied", "replied", "flagged"];
+    if (!validFilters.includes(filter)) {
+      return res.status(400).json({ error: "Invalid filter" });
+    }
 
     let whereClause = "WHERE r.location_id = $1";
     if (filter === "unreplied") whereClause += " AND r.status = 'unreplied'";
@@ -42,9 +67,9 @@ router.get("/location/:locationId", isAuthenticated, async (req, res) => {
 });
 
 // Sync reviews from Google
-router.post("/location/:locationId/sync", isAuthenticated, async (req, res) => {
+router.post("/location/:locationId/sync", isAuthenticated, ownsLocation, async (req, res) => {
   try {
-    const { locationId } = req.params;
+    const locationId = req.params.locationId as string;
     const location = await pool.query("SELECT * FROM locations WHERE id = $1", [locationId]);
     if (location.rows.length === 0) {
       return res.status(404).json({ error: "Location not found" });
@@ -59,8 +84,12 @@ router.post("/location/:locationId/sync", isAuthenticated, async (req, res) => {
 });
 
 // Generate AI reply
-router.post("/:reviewId/generate-reply", isAuthenticated, async (req, res) => {
+router.post("/:reviewId/generate-reply", isAuthenticated, ownsReview, async (req, res) => {
   try {
+    if (!checkAiRateLimit(req.user!.id)) {
+      return res.status(429).json({ error: "Too many AI generation requests. Please wait a moment." });
+    }
+
     const review = await pool.query("SELECT r.*, l.id as loc_id FROM reviews r JOIN locations l ON r.location_id = l.id WHERE r.id = $1", [req.params.reviewId]);
     if (review.rows.length === 0) {
       return res.status(404).json({ error: "Review not found" });
@@ -93,14 +122,18 @@ router.post("/:reviewId/generate-reply", isAuthenticated, async (req, res) => {
 });
 
 // Post reply to Google
-router.post("/:reviewId/reply", isAuthenticated, async (req, res) => {
+router.post("/:reviewId/reply", isAuthenticated, ownsReview, async (req, res) => {
   try {
     const { text } = req.body;
-    if (!text || text.length > 4096) {
+    if (!text || typeof text !== "string" || text.trim().length === 0 || text.length > 4096) {
       return res.status(400).json({ error: "Reply text is required and must be under 4096 characters" });
     }
 
-    const review = await pool.query("SELECT * FROM reviews WHERE id = $1", [req.params.reviewId]);
+    const review = await pool.query(
+      `SELECT r.*, l.user_id as location_owner_id FROM reviews r
+       JOIN locations l ON r.location_id = l.id WHERE r.id = $1`,
+      [req.params.reviewId]
+    );
     if (review.rows.length === 0) {
       return res.status(404).json({ error: "Review not found" });
     }
@@ -108,7 +141,13 @@ router.post("/:reviewId/reply", isAuthenticated, async (req, res) => {
     const r = review.rows[0];
     const user = req.user!;
 
-    await postReply(user.access_token, r.google_review_id, text);
+    // Use the location owner's token for posting to Google (not the current user's)
+    const ownerResult = await pool.query("SELECT access_token FROM users WHERE id = $1", [r.location_owner_id]);
+    if (ownerResult.rows.length === 0) {
+      return res.status(500).json({ error: "Location owner not found" });
+    }
+
+    await postReply(ownerResult.rows[0].access_token, r.google_review_id, text);
 
     // Update review status
     await pool.query(
@@ -117,10 +156,12 @@ router.post("/:reviewId/reply", isAuthenticated, async (req, res) => {
     );
 
     // Log the posted reply
+    const source = req.body.source;
+    const validSources = ["ai", "template", "manual"];
     await pool.query(
       `INSERT INTO reply_logs (review_id, draft_text, final_text, source, posted_at, user_id)
        VALUES ($1, $2, $2, $3, NOW(), $4)`,
-      [r.id, text, req.body.source || "manual", user.id]
+      [r.id, text, validSources.includes(source) ? source : "manual", user.id]
     );
 
     // Update location unreplied count

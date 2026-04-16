@@ -1,8 +1,10 @@
 import express from "express";
 import cors from "cors";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import dotenv from "dotenv";
 import passport from "./config/passport";
+import pool from "./config/db";
 import authRoutes from "./routes/auth";
 import locationRoutes from "./routes/locations";
 import reviewRoutes from "./routes/reviews";
@@ -11,8 +13,14 @@ import guidelineRoutes from "./routes/guidelines";
 
 dotenv.config();
 
+if (!process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET environment variable is required");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+const PgStore = connectPgSimple(session);
 
 // Middleware
 app.use(cors({
@@ -20,15 +28,23 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+
+app.set("trust proxy", 1);
+
 app.use(session({
-  secret: process.env.SESSION_SECRET || "gmb-review-manager-secret-change-me",
+  store: new PgStore({
+    pool,
+    tableName: "sessions",
+    createTableIfMissing: true,
+  }),
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
   },
 }));
 app.use(passport.initialize());
@@ -46,8 +62,11 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+// Only listen when running directly (not as a Vercel serverless function)
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
 
 export default app;

@@ -1,11 +1,11 @@
 import { Router } from "express";
-import { isAuthenticated } from "../middleware/auth";
+import { isAuthenticated, ownsLocation } from "../middleware/auth";
 import pool from "../config/db";
 
 const router = Router();
 
 // Get guidelines for a location
-router.get("/location/:locationId", isAuthenticated, async (req, res) => {
+router.get("/location/:locationId", isAuthenticated, ownsLocation, async (req, res) => {
   try {
     const result = await pool.query(
       "SELECT * FROM guidelines WHERE location_id = $1 ORDER BY version DESC LIMIT 1",
@@ -26,7 +26,7 @@ router.get("/location/:locationId", isAuthenticated, async (req, res) => {
 });
 
 // Update guidelines (creates new version)
-router.put("/location/:locationId", isAuthenticated, async (req, res) => {
+router.put("/location/:locationId", isAuthenticated, ownsLocation, async (req, res) => {
   try {
     const { locationId } = req.params;
     const { tone, language, brand_name, custom_instructions } = req.body;
@@ -51,7 +51,7 @@ router.put("/location/:locationId", isAuthenticated, async (req, res) => {
 });
 
 // Get guidelines history
-router.get("/location/:locationId/history", isAuthenticated, async (req, res) => {
+router.get("/location/:locationId/history", isAuthenticated, ownsLocation, async (req, res) => {
   try {
     const result = await pool.query(
       "SELECT * FROM guidelines WHERE location_id = $1 ORDER BY version DESC",

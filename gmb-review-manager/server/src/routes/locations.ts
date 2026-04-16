@@ -1,9 +1,26 @@
 import { Router } from "express";
-import { isAuthenticated, isAdmin } from "../middleware/auth";
+import { isAuthenticated, isAdmin, ownsLocation } from "../middleware/auth";
 import pool from "../config/db";
 import { syncLocationsForUser } from "../services/google";
 
 const router = Router();
+
+// Admin: get all clients — must be before /:id to avoid route conflict
+router.get("/admin/clients", isAdmin, async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT u.id, u.name, u.email, u.avatar_url,
+              COUNT(l.id) as location_count,
+              SUM(l.unreplied_count) as total_unreplied
+       FROM users u LEFT JOIN locations l ON u.id = l.user_id
+       WHERE u.role = 'client'
+       GROUP BY u.id ORDER BY total_unreplied DESC NULLS LAST`
+    );
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Get locations for current user (or all for admin)
 router.get("/", isAuthenticated, async (req, res) => {
@@ -41,31 +58,14 @@ router.post("/sync", isAuthenticated, async (req, res) => {
   }
 });
 
-// Get single location
-router.get("/:id", isAuthenticated, async (req, res) => {
+// Get single location — with ownership check
+router.get("/:id", isAuthenticated, ownsLocation, async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM locations WHERE id = $1", [req.params.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Location not found" });
     }
     res.json(result.rows[0]);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Admin: get all clients
-router.get("/admin/clients", isAdmin, async (_req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT u.id, u.name, u.email, u.avatar_url,
-              COUNT(l.id) as location_count,
-              SUM(l.unreplied_count) as total_unreplied
-       FROM users u LEFT JOIN locations l ON u.id = l.user_id
-       WHERE u.role = 'client'
-       GROUP BY u.id ORDER BY total_unreplied DESC NULLS LAST`
-    );
-    res.json(result.rows);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

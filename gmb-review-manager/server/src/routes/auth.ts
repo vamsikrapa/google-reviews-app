@@ -11,9 +11,11 @@ router.get("/google", passport.authenticate("google", {
 }));
 
 router.get("/google/callback",
-  passport.authenticate("google", { failureRedirect: "/login?error=auth_failed" }),
+  passport.authenticate("google", {
+    failureRedirect: `${process.env.CLIENT_URL || ""}/login?error=auth_failed`,
+  }),
   (_req, res) => {
-    res.redirect("/");
+    res.redirect(process.env.CLIENT_URL || "/");
   }
 );
 

@@ -80,6 +80,15 @@ CREATE TABLE IF NOT EXISTS guidelines (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Sessions table (for connect-pg-simple)
+CREATE TABLE IF NOT EXISTS sessions (
+  sid VARCHAR NOT NULL COLLATE "default",
+  sess JSON NOT NULL,
+  expire TIMESTAMPTZ(6) NOT NULL,
+  PRIMARY KEY (sid)
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions(expire);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_locations_user_id ON locations(user_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_location_id ON reviews(location_id);

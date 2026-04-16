@@ -3,7 +3,7 @@ import pool from "../config/db";
 const GBP_API_BASE = "https://mybusinessbusinessinformation.googleapis.com/v1";
 const GBP_ACCOUNT_API = "https://mybusinessaccountmanagement.googleapis.com/v1";
 
-async function fetchWithToken(url: string, accessToken: string, options: RequestInit = {}) {
+async function fetchWithToken(url: string, accessToken: string, options: RequestInit = {}): Promise<any> {
   const res = await fetch(url, {
     ...options,
     headers: {
@@ -54,13 +54,10 @@ export async function postReply(
 
 export async function deleteReply(accessToken: string, reviewName: string) {
   const url = `https://mybusiness.googleapis.com/v4/${reviewName}/reply`;
-  await fetch(url, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  await fetchWithToken(url, accessToken, { method: "DELETE" });
 }
 
-export async function syncLocationsForUser(userId: string, accessToken: string) {
+export async function syncLocationsForUser(userId: string, accessToken: string): Promise<import("pg").QueryResult> {
   const accounts = await getAccounts(accessToken);
 
   for (const account of accounts) {
