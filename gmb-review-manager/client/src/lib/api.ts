@@ -44,3 +44,5 @@ export const getGuidelines = (locationId: string) =>
   api.get(`/guidelines/location/${locationId}`).then((r) => r.data);
 export const updateGuidelines = (locationId: string, data: any) =>
   api.put(`/guidelines/location/${locationId}`, data).then((r) => r.data);
+
+export default api;

@@ -9,6 +9,7 @@ import TemplatesPage from "./pages/TemplatesPage";
 import GuidelinesPage from "./pages/GuidelinesPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import FlaggedReviewsPage from "./pages/FlaggedReviewsPage";
+import AutomationSettingsPage from "./pages/AutomationSettingsPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
               <Route index element={<LocationsPage />} />
+              <Route path="automation" element={<AutomationSettingsPage />} />
               <Route path="location/:locationId/reviews" element={<ReviewsPage />} />
               <Route path="location/:locationId/templates" element={<TemplatesPage />} />
               <Route path="location/:locationId/settings" element={<GuidelinesPage />} />

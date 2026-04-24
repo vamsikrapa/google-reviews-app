@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { MapPin, Shield, LogOut, Flag, Menu, X } from "lucide-react";
+import { MapPin, Shield, LogOut, Flag, Menu, X, Zap } from "lucide-react";
 import { useState } from "react";
 
 export default function Layout() {
@@ -30,6 +30,10 @@ export default function Layout() {
             <Link to="/" onClick={() => setSidebarOpen(false)}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium ${location.pathname === "/" ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-100"}`}>
               <MapPin size={18} /> Locations
+            </Link>
+            <Link to="/automation" onClick={() => setSidebarOpen(false)}
+              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium ${location.pathname === "/automation" ? "bg-teal-50 text-teal-700" : "text-gray-700 hover:bg-gray-100"}`}>
+              <Zap size={18} /> Automation
             </Link>
             {isAdmin && (
               <>

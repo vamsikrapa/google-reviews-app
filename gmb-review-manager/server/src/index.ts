@@ -10,6 +10,7 @@ import locationRoutes from "./routes/locations";
 import reviewRoutes from "./routes/reviews";
 import templateRoutes from "./routes/templates";
 import guidelineRoutes from "./routes/guidelines";
+import automationRoutes from "./routes/automation";
 
 dotenv.config();
 
@@ -56,6 +57,7 @@ app.use("/api/locations", locationRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/templates", templateRoutes);
 app.use("/api/guidelines", guidelineRoutes);
+app.use("/api/automation", automationRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {

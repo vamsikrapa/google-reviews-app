@@ -80,6 +80,36 @@ CREATE TABLE IF NOT EXISTS guidelines (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- User-level automation settings (persona + notifications)
+CREATE TABLE IF NOT EXISTS user_automation_settings (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  persona VARCHAR(20) DEFAULT 'professional' CHECK (persona IN ('professional', 'friendly', 'concise', 'custom')),
+  custom_persona_prompt TEXT,
+  signature TEXT DEFAULT 'Best regards, The [Business Name] Team',
+  notify_response_confirmation BOOLEAN DEFAULT true,
+  notify_negative_sentiment BOOLEAN DEFAULT true,
+  notify_daily_digest BOOLEAN DEFAULT false,
+  notification_channel VARCHAR(20) DEFAULT 'email' CHECK (notification_channel IN ('email', 'slack')),
+  slack_webhook_url TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Auto-reply rules (per user)
+CREATE TABLE IF NOT EXISTS auto_reply_rules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  rating_operator VARCHAR(10) NOT NULL CHECK (rating_operator IN ('eq', 'gte', 'lte', 'gt', 'lt')),
+  rating_value INTEGER NOT NULL CHECK (rating_value BETWEEN 1 AND 5),
+  action VARCHAR(20) NOT NULL CHECK (action IN ('auto_reply', 'flag', 'notify')),
+  delay_minutes INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Sessions table (for connect-pg-simple)
 CREATE TABLE IF NOT EXISTS sessions (
   sid VARCHAR NOT NULL COLLATE "default",
@@ -97,3 +127,13 @@ CREATE INDEX IF NOT EXISTS idx_reviews_is_flagged ON reviews(is_flagged);
 CREATE INDEX IF NOT EXISTS idx_reply_logs_review_id ON reply_logs(review_id);
 CREATE INDEX IF NOT EXISTS idx_templates_location_id ON templates(location_id);
 CREATE INDEX IF NOT EXISTS idx_guidelines_location_id ON guidelines(location_id);
+CREATE INDEX IF NOT EXISTS idx_auto_reply_rules_user_id ON auto_reply_rules(user_id);
+CREATE INDEX IF NOT EXISTS idx_auto_reply_rules_active ON auto_reply_rules(user_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_reviews_sentiment ON reviews(sentiment);
+
+-- Reviews: sentiment + reply mode additions (nullable for backwards compat)
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS sentiment VARCHAR(20)
+  CHECK (sentiment IN ('very_positive', 'positive', 'neutral', 'negative', 'very_negative'));
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS sentiment_tags TEXT[];
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS reply_mode VARCHAR(20) DEFAULT 'manual'
+  CHECK (reply_mode IN ('auto', 'draft', 'manual', 'flagged'));
